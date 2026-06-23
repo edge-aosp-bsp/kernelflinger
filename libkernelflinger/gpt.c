@@ -174,8 +174,18 @@ static EFI_STATUS read_gpt_partitions(struct gpt_disk *disk)
 		return EFI_UNSUPPORTED;
 	}
 
+	if (disk->gpt_hd.size_of_entry != GPT_ENTRY_SIZE) {
+		error(L"Invalid GPT entry size %d, expected %d", disk->gpt_hd.size_of_entry, GPT_ENTRY_SIZE);
+		return EFI_UNSUPPORTED;
+	}
+
 	offset = disk->bio->Media->BlockSize * disk->gpt_hd.entries_lba;
 	size = ((UINTN)disk->gpt_hd.number_of_entries) * disk->gpt_hd.size_of_entry;
+
+	if (size > sizeof(disk->partitions)) {
+		error(L"GPT partition table size %d exceeds buffer size %d", size, sizeof(disk->partitions));
+		return EFI_UNSUPPORTED;
+	}
 
 	ret = uefi_call_wrapper(disk->dio->ReadDisk, 5, disk->dio, disk->bio->Media->MediaId, disk->dio_offset + offset, size, disk->partitions);
 	if (EFI_ERROR(ret)) {
