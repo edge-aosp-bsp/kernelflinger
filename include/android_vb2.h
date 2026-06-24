@@ -46,7 +46,8 @@ EFI_STATUS get_avb_result(
 EFI_STATUS android_query_image_from_avb_result(
                 IN AvbSlotVerifyData *slot_data,
                 IN const char *label,
-                OUT VOID **image);
+                OUT VOID **image,
+                OUT UINT32 *out_size);
 
 EFI_STATUS android_install_acpi_table_avb(AvbSlotVerifyData *slot_data);
 

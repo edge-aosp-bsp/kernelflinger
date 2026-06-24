@@ -725,7 +725,7 @@ EFI_STATUS setup_acpi_table(VOID *bootimage,
         if (aosp_header->header_version >= 1 && aosp_header->header_version < BOOT_HEADER_V3) {
                 VOID *acpio;
                 acpio = bootimage + aosp_header->recovery_acpio_offset;
-                ret = install_acpi_table_from_recovery_acpio(acpio);
+                ret = install_acpi_table_from_recovery_acpio(acpio, aosp_header->recovery_acpio_size);
                 if (EFI_ERROR(ret)) {
                         efi_perror(ret, L"Install from recovery_acpio failed");
                         return ret;
@@ -1913,7 +1913,7 @@ static EFI_STATUS android_install_acpi_table(VOID)
         EFI_STATUS ret = EFI_SUCCESS;
 
         for (int i = 0; acpi_part_names[i] != NULL; i++) {
-                ret = install_acpi_table_from_partitions(NULL, acpi_part_names[i]);
+                ret = install_acpi_table_from_partitions(NULL, 0, acpi_part_names[i]);
                 if (EFI_ERROR(ret)) {
                         efi_perror(ret, L"Failed to install acpi table from %a image",
                                    acpi_part_names[i]);

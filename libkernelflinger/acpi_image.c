@@ -157,7 +157,7 @@ EFI_STATUS acpi_image_get_length(const CHAR16 *label, struct ACPI_INFO **acpi_in
 	return EFI_SUCCESS;
 }
 
-static EFI_STATUS acpi_image_load_partition(const CHAR16 *label, VOID **image)
+static EFI_STATUS acpi_image_load_partition(const CHAR16 *label, VOID **image, UINT32 *out_size)
 {
 	EFI_STATUS ret;
 	struct gpt_partition_interface gpart;
@@ -191,6 +191,7 @@ static EFI_STATUS acpi_image_load_partition(const CHAR16 *label, VOID **image)
 		return ret;
 	}
 	*image = acpiimage;
+	*out_size = (*acpi_info).img_size;
 	FreePool(acpi_info);
 	return EFI_SUCCESS;
 }
@@ -307,7 +308,7 @@ EFI_STATUS install_acpi_table_from_boot_acpi(VOID *acpiimage, UINTN total_size)
 	return EFI_SUCCESS;
 }
 
-static EFI_STATUS acpi_image_parse_table(VOID *acpiimage, int is_acpio)
+static EFI_STATUS acpi_image_parse_table(VOID *acpiimage, UINT32 image_size, int is_acpio)
 {
 	struct dt_table_header *header = (struct dt_table_header *)(acpiimage);
 	struct dt_table_entry *entry;
@@ -315,10 +316,21 @@ static EFI_STATUS acpi_image_parse_table(VOID *acpiimage, int is_acpio)
 	VOID *acpi_table;
 	UINTN dt_size, dt_offset, tablekey;
 
+	if (image_size < sizeof(struct dt_table_header)) {
+		error(L"ACPI image: image too small to contain header");
+		return EFI_UNSUPPORTED;
+	}
+
 	UINT32 entry_size = bswap_32(header->dt_entry_size);
 	UINT32 entry_offset = bswap_32(header->dt_entries_offset);
 	UINT32 entry_count = bswap_32(header->dt_entry_count);
 	EFI_STATUS ret;
+
+	if (entry_size < sizeof(struct dt_table_entry) || entry_offset > image_size ||
+	    entry_count > (image_size - entry_offset) / entry_size) {
+		error(L"ACPI image: entry table out of bounds");
+		return EFI_UNSUPPORTED;
+	}
 
 	for (UINT32 i = 0; i < entry_count; i++, entry_offset += entry_size) {
 		entry = (struct dt_table_entry *)(acpiimage + entry_offset);
@@ -327,6 +339,11 @@ static EFI_STATUS acpi_image_parse_table(VOID *acpiimage, int is_acpio)
 		dt_offset = bswap_32(entry->dt_offset);
 		if (dt_size == 0 || dt_offset == 0)
 			continue;
+
+		if (dt_offset > image_size || dt_size > image_size - dt_offset) {
+			error(L"ACPI image: entry %d data out of bounds", i);
+			return EFI_UNSUPPORTED;
+		}
 
 		acpi_table = acpiimage + dt_offset;
 		acpi_header = (struct ACPI_DESC_HEADER *)(acpi_table);
@@ -366,14 +383,15 @@ static EFI_STATUS install_acpi_image_from_partition(int is_acpio)
 		acpi_label = slot_label(ACPI_LABEL);
 
 	VOID *acpiimage = NULL;
+	UINT32 image_size = 0;
 
-	ret = acpi_image_load_partition(acpi_label, &acpiimage);
+	ret = acpi_image_load_partition(acpi_label, &acpiimage, &image_size);
 	if (EFI_ERROR(ret)) {
 		efi_perror(ret, L"Failed to load image from %s partition",
 			   acpi_label);
 		return ret;
 	}
-	ret = acpi_image_parse_table(acpiimage, is_acpio);
+	ret = acpi_image_parse_table(acpiimage, image_size, is_acpio);
 	if (EFI_ERROR(ret)) {
 		efi_perror(ret, L"Failed to install acpi table from %s image",
 			   acpi_label);
@@ -384,7 +402,7 @@ static EFI_STATUS install_acpi_image_from_partition(int is_acpio)
 	return ret;
 }
 
-static EFI_STATUS check_install_acpi_image(VOID *image, int is_acpio)
+static EFI_STATUS check_install_acpi_image(VOID *image, UINT32 image_size, int is_acpio)
 {
 	EFI_STATUS ret = EFI_SUCCESS;
 	struct dt_table_header *aosp_header;
@@ -395,7 +413,7 @@ static EFI_STATUS check_install_acpi_image(VOID *image, int is_acpio)
 	if (magic != ACPI_TABLE_MAGIC)
 		return EFI_SUCCESS;
 
-	ret = acpi_image_parse_table(image, is_acpio);
+	ret = acpi_image_parse_table(image, image_size, is_acpio);
 	if (EFI_ERROR(ret))
 		return ret;
 
@@ -415,7 +433,7 @@ static EFI_STATUS check_install_acpi_image(VOID *image, int is_acpio)
  * |  1   |   1   |   -    |   0    | recovery | inst(acpi) && inst(recovery_acpio) |
  * |  1   |   1   |   -    |   1    | recovery | inst(acpi)                         |
  */
-EFI_STATUS install_acpi_table_from_partitions(VOID *image,
+EFI_STATUS install_acpi_table_from_partitions(VOID *image, UINT32 image_size,
 					      const char *part_name)
 {
 	int is_acpio;
@@ -441,10 +459,10 @@ EFI_STATUS install_acpi_table_from_partitions(VOID *image,
 	if (image == NULL)
 		return install_acpi_image_from_partition(is_acpio);
 	else
-		return check_install_acpi_image(image, is_acpio);
+		return check_install_acpi_image(image, image_size, is_acpio);
 }
 
-EFI_STATUS install_acpi_table_from_recovery_acpio(VOID *image)
+EFI_STATUS install_acpi_table_from_recovery_acpio(VOID *image, UINT32 image_size)
 {
 	enum boot_target target;
 
@@ -453,7 +471,7 @@ EFI_STATUS install_acpi_table_from_recovery_acpio(VOID *image)
 	if (!use_slot()) {
 		if (target == RECOVERY) {
 			debug(L"Install acpi table from recovery_acpio");
-			return check_install_acpi_image(image, 1);
+			return check_install_acpi_image(image, image_size, 1);
 		}
 	}
 
