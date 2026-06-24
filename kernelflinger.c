@@ -265,6 +265,12 @@ static enum boot_target check_bcb(CHAR16 **target_path, BOOLEAN *oneshot)
 	if (target[0] == L'\\') {
 		UINTN len;
 
+		if (device_is_locked()) {
+			error(L"BCB file boot not allowed on locked device");
+			t = NORMAL_BOOT;
+			goto out;
+		}
+
 		if (!file_exists(g_disk_device, target)) {
 			error(L"Specified BCB file '%s' doesn't exist",
 					target);
