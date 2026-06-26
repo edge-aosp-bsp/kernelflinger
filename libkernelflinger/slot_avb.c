@@ -347,7 +347,10 @@ const char *slot_get_active(void)
 		debug(L"slot_get_active direct return %a", cur_suffix);
 		return cur_suffix;
 	}
-	avb_ab_flow(&ab_ops, requested_partitions, AVB_SLOT_VERIFY_FLAGS_ALLOW_VERIFICATION_ERROR,\
+	AvbSlotVerifyFlags flags = device_is_locked()
+			? AVB_SLOT_VERIFY_FLAGS_NONE
+			: AVB_SLOT_VERIFY_FLAGS_ALLOW_VERIFICATION_ERROR;
+	avb_ab_flow(&ab_ops, requested_partitions, flags,
 			AVB_HASHTREE_ERROR_MODE_RESTART, &data);
 	if (!data)
 		return NULL;

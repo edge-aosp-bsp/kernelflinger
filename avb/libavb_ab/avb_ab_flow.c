@@ -339,7 +339,7 @@ AvbABFlowResult avb_ab_flow(AvbABOps* ab_ops,
         ret = AVB_AB_FLOW_RESULT_ERROR_IO;
         goto out;
       }
-      if (current_rollback_index_value != rollback_index_value) {
+      if (rollback_index_value > current_rollback_index_value) {
         io_ret = ops->write_rollback_index(ops, n, rollback_index_value);
         if (io_ret == AVB_IO_RESULT_ERROR_OOM) {
           ret = AVB_AB_FLOW_RESULT_ERROR_OOM;
