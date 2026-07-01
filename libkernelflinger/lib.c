@@ -1435,7 +1435,7 @@ EFI_STATUS memdump(void *dest, size_t dest_size, const void *source, size_t coun
         }
 
         if (dest_size < count) {
-                CopyMem(dest, 0, (UINTN)dest_size);
+                SetMem(dest, (UINTN)dest_size, 0);
                 error(L"<memcpy_s BAD_BUFFER_SIZE 0x%x %d %d", source, dest_size, count);
                 return EFI_BAD_BUFFER_SIZE;
         }
@@ -1463,7 +1463,7 @@ EFI_STATUS memcpy_s(void *dest, size_t dest_size, const void *source, size_t cou
         }
 
         if (source == NULL || dest_size < count) {
-                CopyMem(dest, 0, (UINTN)dest_size);
+                SetMem(dest, (UINTN)dest_size, 0);
                 error(L"<memcpy_s BAD_BUFFER_SIZE 0x%x %d %d", source, dest_size, count);
                 return EFI_BAD_BUFFER_SIZE;
         }
